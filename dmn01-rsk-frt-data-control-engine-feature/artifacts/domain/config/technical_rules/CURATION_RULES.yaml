@@ -1,0 +1,13 @@
+rules:
+  FRT_COLLATERAL_D_COLLATERAL_ID_IS_NULL:
+    rule_type: IS_NULL
+  FRT_COLLATERAL_D_NUMBER_OF_DAYS:
+    rule_type: NUMBER_DAYS_SINCE_LAST_CHECK
+    params:
+      column_name: ""
+      max_days: 365
+  FRT_COLLATERAL_D_CHARGE_GR_FACILITY:
+    rule_type: SQL_EXPR
+    rules_sql_expr:
+      sql_id: is_not_smaller
+      sql_expr: "(collateral_charges.coll_charge_value >= collateral_facilities.cfl_allocation_value)"

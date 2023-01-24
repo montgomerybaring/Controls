@@ -1,0 +1,40 @@
+# Default values for dce-template-data.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+maxUnavailable: 0
+
+image:
+  repository: eu.gcr.io/mgmt-bak-prd-dbdf/sbs_dmg_rtl/dce-template-data
+  tag: release_v0.211.0
+  # Overrides the image tag whose default is the chart appVersion. Jenkins replaces this tag value.
+  pullPolicy: Always
+
+config:
+  projectId: sbs-dmg-pre-01-bff8
+  bucket: sbs-dmg-pre-01-stb-euwe2-dmg-data-control-engine
+  dataset: sbs_dmg_pre_bqd_euwe2_data_control_engine
+  
+imagePullSecrets: []
+nameOverride: dce-template-data
+fullnameOverride: dce-template-data
+
+pod:
+  annotations: {}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+
+serviceAccount:
+  name: sa-dmg-dce-template-data
+  svc: svc-dmg-dce-template-data
+  automountServiceAccountToken: true
+
+resources:
+  limits:
+    cpu: "1"
+    memory: 2Gi
+  requests:
+    cpu: "1"
+    memory: 2Gi

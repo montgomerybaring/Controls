@@ -1,0 +1,17 @@
+#Validation date check
+
+rule_bindings:
+  COLLATERAL_T&L_CNTRLS_004:
+    table_name: nested_collateral
+    field_name: CollateralProductGrossValue
+    timestamp_field: val_load_datetime
+    rule_id: FRT_COLLATERAL_D_NUMBER_OF_DAYS
+    summary_message:
+      schema_sql_mapping:
+        providing_customer: dimension1
+    fail_message:
+      schema_sql_mapping:
+        providing_customer: dimension1
+      schema_values:
+        entity_id: ${dimension1}
+

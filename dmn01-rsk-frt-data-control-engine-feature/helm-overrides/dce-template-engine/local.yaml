@@ -1,0 +1,68 @@
+# Default values for dce-template-engine.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: dce-template-engine
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "local5"
+
+job:
+  startingDeadlineSeconds: 300
+  project: "sbs-dmg-ide-03-7c47"
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+
+config:
+  # Big query dataset project id
+  dataset_project: "sbs-dmg-ide-03-7c47"
+  dataset: "dce_test"
+  view: "dce_test"
+  # Blank pubsub project or topic means it won't publish out but will still process the rules
+  pubsub_project:
+  topic:
+  # Blank bucket project or bucket means it will use the values passed in by the subsequent values,
+  # which will be placed into a configmap and mounted into the container.
+  # If a bucket is supplied, no mount is made for the config map and the configuration is loaded from the bucket instead.
+  bucket_project:
+  bucket:
+  # Configuration for the config map. Note that if you define the bucket then the below are not used as it will load from the bucket instead.
+  technical_rules: |-
+    rules:
+      NOT_NULL_SIMPLE:
+        rule_type: IS_NULL
+      VALID_SORT_CODE:
+        params:
+          allowed_values: ('119100', '119109')
+        rule_type: VALID_CODE
+  rule_bindings: |-
+    rule_bindings:
+      PNA_SQL_001:
+        table_name: PaymentDeviceLinkCreated
+        field_name: identification
+        rules_sql_expr:
+        - sql_id: identification_valid_list
+          sql_expr: "( identification in ('119100', '119109') )"
+        - sql_id: identification_not_null
+          sql_expr: "( identification IS NOT NULL )"
+  filters: |-
+    filters:
+      UK_OBIE_IBAN:
+        sql_expr: 'scheme_name = "UK_OBIE_IBAN"'
+
+serviceAccount:
+  create: true
+  name: sa-dmg-data-control-engine
+  svc: svc-dmg-data-control-engine
+
+
+resources: # {}
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 200m
+    memory: 128Mi

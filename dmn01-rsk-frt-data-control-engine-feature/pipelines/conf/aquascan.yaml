@@ -1,0 +1,7 @@
+image:
+  dockerImage: '' # Auto-updated upon Jenkins runtime. One of 'dce-template-engine', 'dce-template-rules' or 'dce-template-views'
+  description: Data Management Framework - the Data Control Engine to process configurable rules against data and publish the results.
+  type: application_tool
+  scanGating: low
+  helmChartPath: 'helm-charts/*' # Auto-updated to the helm chart dir upon Jenkins runtime
+  helmChartPathOverides: 'helm-overrides/*' # Auto-updated to the helm override dir upon Jenkins runtime

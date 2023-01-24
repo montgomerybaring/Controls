@@ -1,0 +1,13 @@
+config:
+  dockerfile_path: './docker/*/Dockerfile' # Auto-updated to the specific Dockerfile path upon jenkins runtime
+  destRepo: 'gcr'
+  registryUrl: 'eu.gcr.io/dmn01-rskctl-bld-01-2fd1' # <<-- Update to GCR project
+  registryProject: 'rsk' # <<-- Update to project workstream
+  registryCreds: ''
+  proxy_host: 'ep.threatpulse.net:80'
+  aquaURL: 'https://aqua.mgmt-bld.oncp.dev'
+  aquaSecImage: 'harbor.mgmt-bld.oncp.dev/platform_tools/aqua/scanner:4.6.20009'
+  dockerBuild_args:
+  dockerCache: false
+  liveBranch: 'main'
+#

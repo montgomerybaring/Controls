@@ -1,0 +1,17 @@
+#Null Check
+
+rule_bindings:
+  RSK_FRT_COLLATERAL_D_001:
+    table_name: nested_collateral
+    field_name: providing_customer
+    timestamp_field: val_load_datetime  #Check this as CFL bq table has (Type=TimeStamp) whereas Collateral has (Type=DateTime)
+    rule_id: FRT_COLLATERAL_D_COLLATERAL_ID_IS_NULL
+    summary_message:
+      schema_sql_mapping:
+        providing_customer: dimension1
+    fail_message:
+      schema_sql_mapping:
+        providing_customer: dimension1
+      schema_values:
+        entity_id: FRT_COLLATERAL_D_COLLATERAL_ID_IS_NULL{dimension1}
+

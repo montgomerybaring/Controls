@@ -1,0 +1,24 @@
+environmentName:
+  default:
+    workstream: rskcda # The workstream of the project
+    valuestreamWorkstream: dmn01-rskcda # The valuestream + workstream of the project
+    dataProjectId: dmn01-rsksoi-bld-01-2017 # The project where the engine log outputs are stored (in BLD)
+    engineLogDataset: dmn01_rsksoi_bqd_euwe2_data_control_engine # The dataset where the engine log outputs are stored
+    engineLogOutputs: dq_outputs # The table where engine log outputs are stored
+    clusterProjectId: dmn01-rskcda-bld-01-997c # The project where the DCE application is installed (in BLD)
+    clusterName: dmn01-rskcda-bld-01-kcl-01-euwe2 # The cluster in which the DCE application is installed
+    region: europe-west2 # The region in which the cluster runs
+    namespace: ns-kcl-dmn01-rskcda-data-control-engine # The namespace the DCE application runs on
+    spinakerPubSubTopic: projects/mgmt-spi-prd-597c/topics/spi-pst-sbs-dmg # Only needed when deploying to INT. The pubsub topic which Spinnaker can be triggered from
+
+
+helmChartName:
+  dce-template-engine:
+    chartVersion: 1.0.0
+  dce-template-rules:
+    chartVersion: 1.0.0
+  dce-template-views:
+    chartVersion: 1.0.0
+  dce-template-data:
+    chartVersion: 1.0.0
+

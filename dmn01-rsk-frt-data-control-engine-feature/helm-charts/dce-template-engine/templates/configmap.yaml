@@ -1,0 +1,13 @@
+{{- if not .Values.config.bucket }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dce-template-engine.fullname" . }}-config
+  labels:
+    {{- include "dce-template-engine.labels" . | nindent 4 }}
+data:
+  # file-like keys
+  technical_rules.yaml: |{{ .Values.config.technical_rules | nindent 4 }}
+  rule_bindings.yaml: |{{ .Values.config.rule_bindings | nindent 4 }}
+  filters.yaml: |{{ .Values.config.filters | nindent 4 }}
+{{- end }}

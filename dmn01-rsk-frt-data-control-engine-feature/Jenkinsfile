@@ -1,0 +1,353 @@
+#!groovy
+
+import groovy.json.*
+
+library identifier: 'jenkins-sharedlib-helm-charts@master', retriever : modernSCM([$class: 'GitSCMSource',
+                            remote : 'https://github.com/lbg-gcp-foundation/jenkins-sharedlib-helm-charts.git',credentialsId : 'jenkinsPAT'])
+//Since image contains vulnerabilities BT-511 branch is used for building the image and pushing to gcr
+library identifier: 'jenkins-sharedlib-bakery-lifecycle@master', retriever: modernSCM([$class: 'GitSCMSource',
+                            remote: 'https://github.com/lbg-gcp-foundation/jenkins-sharedlib-bakery-lifecycle.git',credentialsId: 'jenkinsPAT'])
+library identifier: 'jenkins-sharedlib-trufflehog@master', retriever: modernSCM([$class: 'GitSCMSource',
+                            remote: 'https://github.com/lbg-gcp-foundation/jenkins-sharedlib-trufflehog.git',credentialsId: 'jenkinsPAT'])
+library identifier: 'jenkins-sharedlib-compliance@master', retriever: modernSCM([$class: 'GitSCMSource',
+							remote: 'https://github.com/lbg-gcp-foundation/jenkins-sharedlib-compliance.git',credentialsId: 'jenkinsPAT'])
+library identifier: 'jenkins-sharedlib-release@master', retriever: modernSCM([$class: 'GitSCMSource',
+                            remote: 'https://github.com/lbg-gcp-foundation/jenkins-sharedlib-release.git',credentialsId: 'jenkinsPAT'])
+
+currentBuild.description = params.PROJECT_DIR
+
+pipeline {
+  options {
+    ansiColor('xterm')
+    timeout(time: 15, unit: 'MINUTES')
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '50'))
+    durabilityHint('PERFORMANCE_OPTIMIZED')
+  }
+
+  agent {
+    kubernetes {
+      label "dce-build-${UUID.randomUUID().toString()}"
+      yamlFile 'pipelines/podTemplate.yaml'
+    }
+  }
+
+  parameters {
+    choice(name: 'Environment', choices: ['default'], description: 'Select the pod template')
+    choice(name: 'Pipeline', choices: ['dce-template-engine', 'dce-template-rules', 'dce-template-views', 'dce-template-data'], description: 'Select which of the DCE pipelines you wish to build and deploy')
+    string(name: 'ImageTag', defaultValue: '', description: 'OPTIONAL : To deploy jobserver helm chart with older image tags')
+    booleanParam(name: 'ClearDCEOutput', defaultValue: false, description: 'OPTIONAL : Clear dq-output in DCE dataset')
+    booleanParam(name: 'BuildImage', defaultValue: false, description: 'OPTIONAL : Set live branch in pipelines/config/jenkinsconfig.yaml to push image to gcr')
+    booleanParam(name: 'PurgeChart', defaultValue: false, description: 'OPTIONAL : Deletes the helm chart')
+    booleanParam(name: 'DeployChart', defaultValue: false, description: 'OPTIONAL : deploys the helm chart')
+    booleanParam(name: 'ReleaseImage', defaultValue: false, description: 'OPTIONAL : Release image')
+  }
+
+  environment {
+    PROJECT_DIR = '.'
+    COMPONENT_DIR = "${env.WORKSPACE}/${PROJECT_DIR}"
+
+    DOCKER = "${COMPONENT_DIR}/pipelines/conf/dockerbuild.yaml"
+    AQUA = "${COMPONENT_DIR}/pipelines/conf/aquascan.yaml"
+    JENKINS = "${COMPONENT_DIR}/pipelines/conf/jenkinsconfig.yaml"
+
+    gitUserEmail = "jenkins-ci@oncp.dev"
+    gitHttpProxy = "ep.threatpulse.net:80"
+    gitUserName = "jenkins-ci@oncp.dev"
+  }
+
+  stages {
+    stage('Trufflehog Scan') {
+      when { branch 'PR-*' }
+      steps {
+        echo '*********************** Trufflehog Repo Scan ***********************************'
+        container('trufflehog') {
+          singleRepoScan([branchName: env.BRANCH_NAME, override: true, containerName: 'trufflehog'])
+        }
+      }
+    }
+
+    stage('PR check') {
+      when { branch 'PR-*' }
+      steps {
+        echo '*********************** PR check ***********************************'
+        container('changelog') {
+          validatePR([prTitle: env.CHANGE_TITLE])
+        }
+      }
+    }
+
+    stage('Init') {
+      when { environment name: 'ReleaseImage', value: 'true' }
+      steps {
+        container('infra-tools') {
+          echo 'Pulling...' + env.BRANCH_NAME
+          initialise()
+          checkout scm
+          checkReleaseIncrement()
+          checkAndRelease()
+        }
+      }
+    }
+
+    stage('Environment Setup') {
+      steps {
+        script {
+
+          CHART_NAME = "${params.Pipeline}"
+
+          // Jenkins config
+          def jenkinsYaml = readYaml(file: "${JENKINS}")
+          jenkinsYamlEnv = jenkinsYaml.environmentName."${params.Environment}"
+          println jenkinsYaml
+
+          WORKSTREAM = jenkinsYamlEnv.workstream.toString()
+          VALUESTREAM_WORKSTREAM = jenkinsYamlEnv.valuestreamWorkstream.toString()
+
+          DATA_PROJECT_NAME = jenkinsYamlEnv.dataProjectId.toString()
+          DCE_ENGINE_DATASET = jenkinsYamlEnv.engineLogDataset.toString()
+          DCE_ENGINE_TABLE = jenkinsYamlEnv.engineLogOutputs.toString()
+
+          K8S_PROJECT_NAME = jenkinsYamlEnv.clusterProjectId.toString()
+          K8S_CLUSTER = jenkinsYamlEnv.clusterName.toString()
+          K8S_NAMESPACE = jenkinsYamlEnv.namespace.toString()
+          K8S_REGION = jenkinsYamlEnv.region.toString()
+
+          SPINNAKER_PUBSUB = jenkinsYamlEnv.spinakerPubSubTopic.toString()
+
+          CHART_VERSION = jenkinsYaml.helmChartName."${params.Pipeline}".chartVersion.toString()
+
+
+          // Aqua config
+          def aquaYaml = readYaml(file: "${AQUA}")
+          IMAGE_NAME = "${params.Pipeline}"
+          // Auto-updating docker image name, and helm charts paths
+          aquaYaml.image.dockerImage = "${IMAGE_NAME}"
+          aquaYaml.image.helmChartPath = "helm-charts/${IMAGE_NAME}"
+          aquaYaml.image.helmChartPathOverides = "helm-overrides/${IMAGE_NAME}"
+
+          sh(script: """rm ${AQUA}""")
+          writeYaml(file: "${AQUA}", data: aquaYaml)
+          println aquaYaml
+          
+
+          // Docker config
+          def dockerYaml = readYaml(file: "${DOCKER}")
+          REGISTRY_URL = dockerYaml.config.registryUrl.toString()
+          REGISTRY_PROJECT = dockerYaml.config.registryProject.toString()
+          // Auto-updating value of liveBranch, and Dockerfile path
+          dockerYaml.config.liveBranch = env.BRANCH_NAME
+          dockerYaml.config.dockerfile_path = "./docker/${IMAGE_NAME}/Dockerfile"
+          
+          sh(script: """rm ${DOCKER}""")
+          writeYaml(file: "${DOCKER}", data: dockerYaml)
+          println dockerYaml
+
+
+          if("${params.ImageTag}" == '' && "${params.BuildImage}" == 'false'){
+            env.tag = getLatestGitTag()
+          }else if("${params.ImageTag}" != '') {
+            env.tag = "${params.ImageTag}"
+          }
+          echo "image tag: " + env.tag
+        }
+      }
+    }
+
+    stage('Clear DCE output table') {
+      when { environment name: 'ClearDCEOutput', value: 'true' }
+      steps {
+        script {
+          container('infra-tools') {
+            echo '*********************** Clear DCE output table ***********************'
+
+            sh """
+              bq query --project_id ${DATA_PROJECT_NAME} --nouse_legacy_sql \
+              "DELETE FROM ${DCE_ENGINE_DATASET}.${DCE_ENGINE_TABLE} WHERE True"
+            """
+
+          }
+        }
+      }
+    }
+
+    stage('Helm: Delete Chart') {
+      when { environment name: 'PurgeChart', value: 'true' }
+      steps {
+        container('infra-tools') {
+          script{
+            sh """
+            gcloud container clusters get-credentials ${K8S_CLUSTER} --region ${K8S_REGION}  --project ${K8S_PROJECT_NAME}
+            gcloud container clusters describe ${K8S_CLUSTER} --region ${K8S_REGION}  --project ${K8S_PROJECT_NAME} --format=json > cluster.json
+            """
+            def clusterMap = readJSON file: 'cluster.json'
+            withEnv(["NO_PROXY=${clusterMap.privateClusterConfig.privateEndpoint},.google.internal,.google.com,.googleapis.com"]) {
+              deleteChartV3(
+                releaseName: "${CHART_NAME}",
+                dryRun: "false",
+                options: "--namespace ${K8S_NAMESPACE}"
+              )
+            }
+          }
+        }
+      }
+    }
+
+    stage('Docker') {
+      when { environment name: 'BuildImage', value: 'true' }
+      steps {
+        echo '*********************** Docker ***********************************'
+        script {
+          echo 'Building the docker image...'
+          imageBuild(dockerConfig: "$DOCKER", aquaConfig: "$AQUA")
+          echo "Image built as ${REGISTRY_URL}/${REGISTRY_PROJECT}/${IMAGE_NAME}:${env.tag}"
+        }
+        archiveArtifacts artifacts: '*.html', allowEmptyArchive: true
+      }
+    }
+
+    stage('Helm: Deploy helm chart') {
+      when { environment name: 'DeployChart', value: 'true' }
+      steps {
+        container('infra-tools') {
+          script {
+            echo "image tag: ${env.tag}"
+            sh """
+
+            gcloud container clusters get-credentials ${K8S_CLUSTER} --region ${K8S_REGION}  --project ${K8S_PROJECT_NAME}
+            gcloud container clusters describe ${K8S_CLUSTER} --region ${K8S_REGION}  --project ${K8S_PROJECT_NAME} --format=json > cluster.json
+            """
+            def clusterMap = readJSON file: 'cluster.json'
+            withEnv(["NO_PROXY=${clusterMap.privateClusterConfig.privateEndpoint},.google.internal,.google.com,.googleapis.com"]) {
+              upgradeReleaseV3(
+                chartName: "helm-charts/${CHART_NAME}",
+                version: "${CHART_VERSION}",
+                namespace: "${K8S_NAMESPACE}",
+                releaseName: "${CHART_NAME}",
+                options: "-f helm-overrides/${params.Pipeline}/${CHART_NAME}-bld-01-config.yaml \
+                          --set=image.tag=${env.tag}",
+                credentialsId: 'jenkinsPAT'
+              )
+              statusReleaseV3(flags: '', releaseName: "${CHART_NAME}", namespace: "${K8S_NAMESPACE}")
+            }
+          }
+        }
+      }
+    }
+
+    stage('Release') {
+      when { environment name: 'ReleaseImage', value: 'true' }
+      steps {
+        script {
+          IMAGE = "${REGISTRY_URL}/${REGISTRY_PROJECT}/${IMAGE_NAME}:${env.tag}"
+          echo "image: ${IMAGE}"
+
+          def config = [
+            // Must contain imagename:imagetag - this image will be renamed to the generated git tag (e.g v0.1.0) and pushed back to the registry.
+            image: "${IMAGE}",
+            // Any folder with Chart.yaml will be released as a tarball by default.
+            releaseFileList: [
+              "helm-charts/${params.Pipeline}/*.yaml",
+              "helm-overrides/${params.Pipeline}/*.yaml"
+            ],
+            // If this is omitted, it will release on all branches
+            releaseBranch: env.BRANCH_NAME,
+            workstream: "${WORKSTREAM}",
+            pubSubTopic: "${SPINNAKER_PUBSUB}",
+            spinnakerPipeline: "Deploy to int-01",
+            spinnakerApp: "${VALUESTREAM_WORKSTREAM}-${params.Pipeline}-int",
+            helmChartList: "generic.yaml",
+            failOnFindings: false,
+            jenkinsCredentials: 'jenkinsPAT',
+            shouldCommitStandardVersions: false
+          ]
+          releaseRTLHandler(config)
+        }
+      }
+    }
+  }
+
+  post{
+    always{
+      cleanWs deleteDirs: true, notFailBuild: true
+    }
+  }
+}
+
+def getLatestGitTag(){
+  withCredentials([usernamePassword(credentialsId: 'jenkinsPAT', passwordVariable: 'C_PASSWORD', usernameVariable: 'C_USERNAME')]) {
+    def tokenisedOrigin = "https://"+C_USERNAME+":"+C_PASSWORD+"@"+GIT_URL.split("https://")[1]
+    sh("git remote set-url origin ${tokenisedOrigin}")
+    sh("git config --global http.proxy \"${gitHttpProxy}\"")
+    sh("git config user.email \"${gitUserEmail}\"")
+    sh("git config user.name \"${gitUserName}\"")
+  }
+
+  sh("git fetch --tags --force")
+  def gitTag = sh(returnStdout: true, script: "git tag --sort version:refname | tail -1").trim()
+  return gitTag
+}
+
+def gitCommit() {
+  sh("git log -1 --pretty=%B > commit.txt")
+  sh("git log -1 --format=\"%H\"> commit_sha.txt")
+  def rawCommitMessage = readFile(file: "commit.txt")
+  commitMessage = rawCommitMessage.trim().toLowerCase()
+  commitSha = readFile(file: "commit_sha.txt")
+  println("[INFO] Commit Message: ${commitMessage}")
+  println("[INFO] Commit Sha: ${commitSha}")
+}
+
+def pushTag(){
+  try {
+    sh("git describe --exact-match HEAD")
+    println("[SKIPPING] Tag is currently matches HEAD - no need to push tag")
+  } catch(e){
+    withCredentials([usernamePassword(credentialsId: 'jenkinsPAT', passwordVariable: 'C_PASSWORD', usernameVariable: 'C_USERNAME')]) {
+        def tokenisedOrigin = "https://"+C_USERNAME+":"+C_PASSWORD+"@"+GIT_URL.split("https://")[1]
+        sh("git remote set-url origin ${tokenisedOrigin}")
+        sh("git config user.email \"${gitUserEmail}\"")
+    }
+    // Setting the proxy
+    sh("git config http.proxy \"${gitHttpProxy}\"")
+
+    sh("git tag -am \"${params.Pipeline} Release- ${gitTag}\" ${gitTag} && git push -u origin ${gitTag}")
+    println("Tag generated: ${gitTag}")
+  }
+}
+
+def initialise(){
+  withCredentials([usernamePassword(credentialsId: 'jenkinsPAT', passwordVariable: 'C_PASSWORD', usernameVariable: 'C_USERNAME')]) {
+    def tokenisedOrigin = "https://"+C_USERNAME+":"+C_PASSWORD+"@"+GIT_URL.split("https://")[1]
+    sh("git remote set-url origin ${tokenisedOrigin}")
+    sh("git config http.proxy \"${gitHttpProxy}\"")
+    sh("git config  user.email \"${gitUserEmail}\"")
+    sh("git config user.name \"${gitUserName}\"")
+  }
+
+  // Force used to refresh local tags
+  sh("git fetch --tags --force")
+  def gitTagSplit = sh(returnStdout: true, script: "git tag --sort version:refname | tail -1").trim().tokenize(".")
+  gitTagSplit = gitTagSplit ?: ["v0", "0", "0"]
+
+  gitTag = [gitTagSplit[0], {gitTagSplit[1].toInteger() + 1}().toString(), gitTagSplit[2]].join(".")
+}
+
+def checkReleaseIncrement(){
+  def releaseIncrement
+  gitCommit()
+
+  if ((commitMessage.startsWith("generic"))) {
+    releaseIncrement = "minor"
+  }
+
+  return releaseIncrement
+}
+
+def checkAndRelease(){
+  if (checkReleaseIncrement()){
+    pushTag()
+    println("commitMessage - ${commitMessage}")
+    sh("exit 0")
+  }
+}

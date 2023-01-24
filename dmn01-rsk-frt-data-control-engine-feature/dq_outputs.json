@@ -1,0 +1,38 @@
+
+[
+  {
+    "mode": "NULLABLE",
+    "name": "data_entity_uri",
+    "type": "STRING"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "field",
+    "type": "STRING"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "rule_id",
+    "type": "STRING"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "rule_binding_id",
+    "type": "STRING"
+  },
+  {
+    "mode": "REQUIRED",
+    "name": "total_outcomes",
+    "type": "NUMERIC"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "max_ts",
+    "type": "TIMESTAMP"
+  },
+  {
+    "mode": "REQUIRED",
+    "name": "created_at",
+    "type": "TIMESTAMP"
+  }
+]

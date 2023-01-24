@@ -1,0 +1,103 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "dce-template-engine.fullname" . }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    {{- include "dce-template-engine.labels" . | nindent 4 }}
+spec:
+  schedule: "{{ .Values.job.schedule }}"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: {{ .Values.job.concurrencyPolicy }}
+  startingDeadlineSeconds: {{ .Values.job.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      name: {{ include "dce-template-engine.fullname" . }}
+      labels:
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        {{- include "dce-template-engine.labels" . | nindent 8 }}
+    spec:
+      ttlSecondsAfterFinished: 3600
+      backoffLimit: 1
+      template:
+        metadata:
+          name: {{ include "dce-template-engine.fullname" . }}
+          labels:
+            chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+            {{- include "dce-template-engine.labels" . | nindent 12 }}
+          {{- with .Values.pod.annotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "dce-template-engine.serviceAccountName" . }}
+          {{- with .Values.pod.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.priorityClassName }}
+          priorityClassName: "{{ .Values.priorityClassName }}"
+          {{- end }}
+          restartPolicy: Never
+          containers:
+          - name: {{ .Chart.Name }}
+            image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+            imagePullPolicy: IfNotPresent
+            env:
+              - name: LOCAL_WORKING_DIR
+                value: "{{ .Values.config.working_dir }}"
+            args:
+            - "--dataset_project_id {{ .Values.config.dataset_project }}"
+            - "--dataset {{ .Values.config.dataset }}"
+            - "--view {{ .Values.config.view }}"
+            {{- if or (not .Values.config.bucket) (not .Values.config.bucket_project) }}
+            - "--technical_rules /config/technical_rules.yaml"
+            - "--rule_bindings /config/rule_bindings.yaml"
+            - "--filters /config/filters.yaml"
+            {{- end }}
+            {{- if and .Values.config.bucket_project .Values.config.bucket }}
+            - "--bucket_project_id {{ .Values.config.bucket_project }}"
+            - "--bucket_name {{ .Values.config.bucket | replace "gs://" "" }}"
+            - "--technical_rules {{ .Values.config.technical_rules }}"
+            - "--rule_bindings {{ .Values.config.rule_bindings }}"
+            - "--filters {{ .Values.config.filters }}"
+            {{- end }}
+            {{- if and .Values.config.pubsub_project .Values.config.topic }}
+            - "--pubsub_project_id {{ .Values.config.pubsub_project }}"
+            - "--topic {{ .Values.config.topic }}"
+            {{- end }}
+            resources:
+              {{- toYaml .Values.resources | nindent 16 }}
+          {{- if or (not .Values.config.bucket) (not .Values.config.bucket_project) }}
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+              readOnly: true
+          volumes:
+          # You set volumes at the Pod level, then mount them into containers inside that Pod
+          - name: config
+            configMap:
+              # Provide the name of the ConfigMap you want to mount.
+              name: {{ include "dce-template-engine.fullname" . }}-config
+              # An array of keys from the ConfigMap to create as files
+              items:
+              - key: "technical_rules.yaml"
+                path: "technical_rules.yaml"
+              - key: "rule_bindings.yaml"
+                path: "rule_bindings.yaml"
+              - key: "filters.yaml"
+                path: "filters.yaml"
+          {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}:
+          {{- end }}

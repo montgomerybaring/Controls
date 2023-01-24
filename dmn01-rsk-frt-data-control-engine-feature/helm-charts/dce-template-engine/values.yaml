@@ -1,0 +1,63 @@
+# Default values for dce-template-engine.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: eu.gcr.io/dmn01-rskctl-bld-01-2fd1/rsk/dce-template-engine
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: v0.8.0
+
+job:
+  startingDeadlineSeconds: 300
+  # Project Id where cron job will be deployed
+  project: ""
+  schedule: "*/15 * * * *"
+  # concurrencyPolicy can either be Allow/Forbid/Replace
+  concurrencyPolicy: Forbid
+
+config:
+  working_dir: wip/
+  # Big query dataset project id
+  dataset_project: ""
+  dataset: ""
+  view: ""
+  # Blank pubsub project or topic means it won't publish out but will still process the rules
+  pubsub_project: ""
+  topic:
+  # Blank bucket project or bucket means it will use the values passed in by the subsequent values,
+  # which will be placed into a configmap and mounted into the container.
+  # If a bucket is supplied, no mount is made for the config map and the configuration is loaded from the bucket instead.
+  bucket_project: ""
+  bucket:
+  # Configuration for the config map. Note that if you define the bucket then the below are not used as it will load from the bucket instead.
+  technical_rules: |-
+    rules: {}
+  rule_bindings: |-
+    rule_bindings: {}
+  filters: |-
+    filters: {}
+
+pod:
+  annotations: {}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+
+serviceAccount:
+  create: false
+  name: sa-kcl-dmn01-rskcda-dce
+  svc: svc-dmn01-rskcda-dce
+
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+priorityClassName: ""

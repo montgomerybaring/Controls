@@ -1,0 +1,49 @@
+# Default values for dce-template-engine.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: eu.gcr.io/dmn01-rskctl-bld-01-2fd1/rsk/dce-template-engine
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion. Jenkins replaces this tag value.
+  tag: v0.8.0
+
+job:
+  startingDeadlineSeconds: 300
+  project: dmn01-rskcda-bld-01-997c
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+
+config:
+  # Big query dataset project id
+  dataset_project: dmn01-rsksoi-bld-01-2017
+  dataset: dmn01_rsk_ncino_collateral_curation
+  view: dmn01_rsk_data_control.BLD_DMN01RSK_DCE #should be view, table placeholder for now
+  # Blank pubsub project or topic means it won't publish out but will still process the rules
+  pubsub_project: sbs-dmg-bld-01-c332
+  topic: sbs-dmg-bld-01-pst-enterprise-data-control
+  # Blank bucket project or bucket means it will use the values passed in by the subsequent values,
+  # which will be placed into a configmap and mounted into the container.
+  # If a bucket is supplied, no mount is made for the config map and the configuration is loaded from the bucket instead.
+  bucket_project: dmn01-rskcda-bld-01-997c
+  bucket: dmn01-rskcda-bld-01-stb-euwe2-dce-collateral
+  technical_rules: technical_rules
+  rule_bindings: rule_bindings
+  filters: filters
+
+serviceAccount:
+  create: false
+  name: sa-kcl-dmn01-rskcda-dce
+  svc: svc-dmn01-rskcda-dce
+
+resources: # {}
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 200m
+    memory: 128Mi
+
+

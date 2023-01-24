@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.container.name }}-{{ randAlphaNum 5 | lower }}
+  annotations:
+    CMDB_AppID: "al15407"
+spec:
+  ttlSecondsAfterFinished: 1800
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: "{{ .Values.serviceAccount.name }}"
+      {{- with .Values.pod.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.container.name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag}}"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: PROJECT_ID
+              value: {{ .Values.config.projectId }}
+            - name: DATASET
+              value: {{ .Values.config.dataset }}
+            - name: VIEW_LABELS
+              value: {{ include "dcetemplateviews.viewvalues" . }}

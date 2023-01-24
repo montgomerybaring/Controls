@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: dce-jenkins-pipeline
+spec:
+  serviceAccountName: svc-gke-local-resourcecreator
+  securityContext:
+    runAsUser: 0
+  volumes:
+    - name: dind-storage
+      emptyDir: {}
+  containers:
+    - name: jnlp
+      image: harbor.mgmt-bld.oncp.dev/platform_tools_rtl/jnlp:release_v0.6.0
+      securityContext:
+        privileged: true
+        allowPrivilegeEscalation: true
+      ttyEnabled: true
+      resources:
+        requests:
+          memory: "100Mi"
+          cpu: "250m"
+        limits:
+          memory: "1000Mi"
+          cpu: "1"
+    - name: docker
+      image: harbor.mgmt-bld.oncp.dev/platform_tools_rtl/docker-dind-gcloud:release_v3.18.0
+      env:
+        - name: HTTP_PROXY
+          value: "http://ep.threatpulse.net:80"
+        - name: HTTPS_PROXY
+          value: "http://ep.threatpulse.net:80"
+        - name: NO_PROXY
+          value: "169.254.169.254,metadata.google.internal,.google.com,.googleapis.com,.cloudendpointsapis.com,.oncp.dev,eu.gcr.io"
+      securityContext:
+        privileged: true
+        allowPrivilegeEscalation: true
+      volumeMounts:
+        - name: dind-storage
+          mountPath: /var/lib/docker
+      resources:
+        requests:
+          memory: "100Mi"
+          cpu: "250m"
+        limits:
+          memory: "1000Mi"
+          cpu: "2"
+    - name: infra-tools
+      image: harbor.mgmt-bld.oncp.dev/platform_tools_rtl/terraform-tools:release_v1.51.0
+      env:
+        - name: HTTP_PROXY
+          value: "http://ep.threatpulse.net:80"
+        - name: HTTPS_PROXY
+          value: "http://ep.threatpulse.net:80"
+        - name: http_proxy
+          value: "http://ep.threatpulse.net:80"
+        - name: https_proxy
+          value: "http://ep.threatpulse.net:80"
+        - name: NO_PROXY
+          value: ".google.internal,.oncp.dev,eu.gcr.io,.googleapis.com,10.84.0.178,169.254.169.254,10.84.8.50,10.84.1.50,10.84.1.66,10.84.2.242,10.84.1.210,10.84.7.98,10.84.26.2,10.84.23.34,10.84.23.178,10.84.20.50"
+        - name: no_proxy
+          value: ".google.internal,.oncp.dev,eu.gcr.io,.googleapis.com,10.84.0.178,169.254.169.254,10.84.8.50,10.84.1.50,10.84.1.66,10.84.2.242,10.84.1.210,10.84.7.98,10.84.26.2,10.84.23.34,10.84.23.178,10.84.20.50"
+      securityContext:
+        runAsUser: 0
+      imagePullPolicy: Always
+      command:
+        - cat
+      tty: true
+      resources:
+        requests:
+          memory: "200Mi"
+          cpu: "250m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+    - name: changelog
+      image: harbor.mgmt-bld.oncp.dev/platform_tools_rtl/standard-version:release_v1.33.0
+      env:
+        - name: https_proxy
+          value: "http://ep.threatpulse.net:80"
+        - name: no_proxy
+          value: "169.254.169.254,metadata.google.internal,.google.com,.googleapis.com,.cloudendpointsapis.com,.oncp.dev,eu.gcr.io"
+      tty: true
+      command:
+        - cat
+      resources:
+        requests:
+          memory: "100Mi"
+          cpu: "100m"
+        limits:
+          memory: "1000Mi"
+          cpu: "500m"
+    - name: trufflehog
+      image: harbor.mgmt-bld.oncp.dev/platform_tools_rtl/trufflehog:release_v0.25.0
+      env:
+        - name: HTTP_PROXY
+          value: "http://ep.threatpulse.net:80"
+        - name: HTTPS_PROXY
+          value: "http://ep.threatpulse.net:80"
+        - name: NO_PROXY
+          value: "169.254.169.254,metadata.google.internal,.google.com,.googleapis.com,.cloudendpointsapis.com,.oncp.dev,eu.gcr.io"
+      command:
+        - cat
+      tty: true
+      resources:
+        requests:
+          memory: "300Mi"
+          cpu: "500m"
+        limits:
+          memory: "1000Mi"
+          cpu: "2"

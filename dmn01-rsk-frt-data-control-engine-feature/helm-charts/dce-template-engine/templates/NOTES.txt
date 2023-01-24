@@ -1,0 +1,10 @@
+
+=== Data Control Engine ===
+
+The application is deployed as a CronJob, which will spin up Jobs every scheduled interval: {{ .Values.job.schedule }}.
+
+The application is configured with the following:
+    GCP Project: {{ .Values.job.project }}
+    Conccurency policy: {{ .Values.job.concurrencyPolicy }}
+
+Version deployed: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}

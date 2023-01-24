@@ -1,0 +1,20 @@
+##Currency Reference Data Check
+#
+#rule_bindings:
+#  COLLATERAL_T&L_CNTRLS_004:
+#    table_name: BLD_DMN01RSK_NCINO_COLLATERAL_CHARGE
+#    field_name: CollateralProductGrossValue
+#    timestamp_field: load_timestamp
+#    rule_id: FRT_COLLATERAL_D_NUMBER_OF_DAYS
+#    params:
+#      column_name: ""
+#      max_days: 365.25
+#    summary_message:
+#      schema_sql_mapping:
+#        CollateralId: dimension1
+#    fail_message:
+#      schema_sql_mapping:
+#        CollateralId: dimension1
+#      schema_values:
+#        entity_id: COLLATERALID
+

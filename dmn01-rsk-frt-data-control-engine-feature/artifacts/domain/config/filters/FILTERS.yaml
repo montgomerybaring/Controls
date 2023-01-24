@@ -1,0 +1,3 @@
+filters:
+  FILTER_CCY_EUR:
+    sql_expr: 'CCY = "EUR"'
